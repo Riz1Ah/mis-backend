@@ -1,7 +1,5 @@
-from contextlib import asynccontextmanager
-import asyncpg
-from fastapi import APIRouter, FastAPI, HTTPException,status, Depends
-from fastapi import Body
+from fastapi import APIRouter, HTTPException,status, Depends
+from fastapi import Body, Request
 
 from models.user_model import User
 from repository import auth_repo
@@ -27,7 +25,7 @@ def protected_endpoint(user: dict = Depends(auth_service.get_authenticated_user_
   return {"message": "This user can connect to a protected endpoint after successfully autheticated", "user": user}
 
 @router.post("/signup")
-async def sign_up(username: str = Body(...), password: str = Body(...)):
+async def sign_up(request:Request, username: str = Body(...), password: str = Body(...)):
   print(username)
   user = auth_repo.users.get(username)
   if user:
@@ -42,7 +40,7 @@ async def sign_up(username: str = Body(...), password: str = Body(...)):
     # "user_id": new_user_id
   )
   # auth_repo.users[username] = new_user
-  async with router.lifespan as connection:
+  async with request.app.state.db.acquire() as connection:
     await auth_repo.create_user(new_user,connection)
   return {"message": "User registered successfully"}
 
