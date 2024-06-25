@@ -8,14 +8,15 @@ from repository import auth_repo
 
 security = HTTPBasic()
 
-def check_if_user_exists(username: str):
-  user = auth_repo.users.get(username)
+def check_if_user_exists(username: str, connection):
+  user = auth_repo.get_user(username,connection)
   if user is None:
     return False
   return True
 
-def authenticate_user(credentials: Annotated[HTTPBasicCredentials, Depends(security)]):
-  user = auth_repo.users.get(credentials.username)
+async def authenticate_user(request, credentials: Annotated[HTTPBasicCredentials, Depends(security)]):
+  async with request.app.state.db._connection_pool.acquire() as connection:
+    user = auth_repo.get_creds(username,connection)
   if user is None or user["password"] != credentials.password:
     raise HTTPException(
       status_code=status.HTTP_401_UNAUTHORIZED,

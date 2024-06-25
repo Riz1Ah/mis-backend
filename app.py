@@ -1,14 +1,11 @@
 from contextlib import asynccontextmanager
 from typing import Union
 
-import asyncpg
-from fastapi import FastAPI, Depends, HTTPException, status, APIRouter
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from repository.db import DATABASE_URL
+from repository.db import Database
 from services import communication_details_service as cds
-from repository import auth_repo
 from routes import auth_routes
 
 app = FastAPI()
@@ -21,16 +18,17 @@ app.add_middleware(
   allow_headers=["*"],
 )
 
-app.include_router(auth_routes.router)
-# Lifespan context for managing database connection pool
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    app.state.db = await asyncpg.create_pool(DATABASE_URL)
-    yield
-    await app.state.db.close()
+@app.on_event("startup")
+async def startup():
+    database_instance = Database()
+    await database_instance.connect()
+    app.state.db = database_instance
 
-# Include the lifespan in the FastAPI app
-app.router.lifespan = lifespan
+@app.on_event("shutdown")
+async def shutdown():
+    await app.state.db._connection_pool.close()
+
+app.include_router(auth_routes.router)
 
 @app.get("/")
 def read_root():

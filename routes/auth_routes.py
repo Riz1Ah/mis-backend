@@ -3,7 +3,6 @@ from fastapi import Body, Request
 
 from models.user_model import User
 from repository import auth_repo
-from repository.db import DATABASE_URL
 from services import auth_service
 
 #let's create router
@@ -27,34 +26,27 @@ def protected_endpoint(user: dict = Depends(auth_service.get_authenticated_user_
 @router.post("/signup")
 async def sign_up(request:Request, username: str = Body(...), password: str = Body(...)):
   print(username)
-  user = auth_repo.users.get(username)
-  if user:
-    raise HTTPException(
-      status_code=status.HTTP_409_CONFLICT,
-      detail="Username already exists",
+  async with request.app.state.db._connection_pool.acquire() as connection:
+    user = auth_service.check_if_user_exists(username,connection)
+    if user:
+      raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail="Username already exists",
+      )
+    new_user_id = len(auth_repo.users) + 1
+    new_user = User(
+      username= username,
+      password= password
+      # "user_id": new_user_id
     )
-  new_user_id = len(auth_repo.users) + 1
-  new_user = User(
-    username= username,
-    password= password
-    # "user_id": new_user_id
-  )
-  # auth_repo.users[username] = new_user
-  async with request.app.state.db.acquire() as connection:
+    # auth_repo.users[username] = new_user
     await auth_repo.create_user(new_user,connection)
   return {"message": "User registered successfully"}
 
-@router.post("/check-account")
-def check_account(username: str = Body(...),password: str = Body(...)):
-  # print(username)
-  user = auth_service.check_if_user_exists(username)
-  if user:
-    return {"userExists": True}
-  return {"userExists":False}
 # Login endpoint - Creates a new session
 
 @router.post("/login")
-def login(user: dict = Depends(auth_service.authenticate_user)):
+def login(request:Request, user: dict = Depends(auth_service.authenticate_user)):
   session_id = auth_service.create_session(user["user_id"])
   return {"message": "success", "session_id": session_id}
 
